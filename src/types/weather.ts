@@ -264,11 +264,26 @@ export interface ConversationRecord {
   message_count?: number;
 }
 
+export interface SearchGroundingSource {
+  title: string;
+  uri: string;
+}
+
+export interface SearchGroundingResponse {
+  query: string;
+  answer: string;
+  sources: SearchGroundingSource[];
+  web_search_queries: string[];
+  model: string;
+  checked_at: string;
+}
+
 export type NavSection =
   | 'dashboard'
   | 'assistant'
   | 'forecast'
   | 'map'
+  | 'scene3d'
   | 'alerts'
   | 'analytics'
   | 'settings';

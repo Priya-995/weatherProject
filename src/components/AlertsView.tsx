@@ -19,6 +19,7 @@ import type {
 } from '../types/weather.ts';
 import { formatTimestamp } from '../utils/weatherFormat.ts';
 import { FormattedMessage } from './FormattedMessage.tsx';
+import { SearchGroundingPanel } from './SearchGroundingPanel.tsx';
 
 interface AlertsViewProps {
   selectedLocation: LocationResult;
@@ -391,6 +392,14 @@ export function AlertsView({ selectedLocation, language, userType }: AlertsViewP
           </>
         ) : null}
       </section>
+
+      {/* Live Web & Bulletin Verification via Gemini 4 + Google Search Grounding */}
+      <SearchGroundingPanel
+        locationName={selectedLocation.name}
+        uiLanguage={language}
+        userType={userType}
+        compact
+      />
 
       {/* Derived Meteorological Advisories (Strictly Non-Official) */}
       <section className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-4">

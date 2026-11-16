@@ -6,6 +6,7 @@ import { createServer as createViteServer } from 'vite';
 import type { OfficialAlert, SupportedLanguageCode, UserRoleType } from './src/types/weather.ts';
 import { chatRepo } from './server/db.ts';
 import { explainAlertWithGroq, runWeatherGptTurn } from './server/groqAgent.ts';
+import { queryWeatherWithSearchGrounding } from './server/geminiSearch.ts';
 import {
   fetchHistoricalWeather,
   fetchMapStations,
@@ -51,11 +52,16 @@ async function startServer() {
     const groqConfigured = Boolean(
       process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'MY_GROQ_API_KEY'
     );
+    const geminiConfigured = Boolean(
+      process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY'
+    );
     res.json({
       status: 'ok',
       runtime: FASTAPI_URL ? 'fastapi-proxy' : 'express-node',
       groq_configured: groqConfigured,
       groq_model: process.env.GROQ_MODEL || 'openai/gpt-oss-20b',
+      gemini_configured: geminiConfigured,
+      gemini_search_model: 'gemini-4-hydrogen',
       storage: chatRepo.getStorageInfo(),
       timestamp: new Date().toISOString(),
     });
@@ -220,6 +226,28 @@ async function startServer() {
       return res.status(typedErr.status || 500).json({
         error: typedErr.code || 'EXPLAIN_FAILED',
         message: typedErr.message || 'Unable to generate AI explanation.',
+      });
+    }
+  });
+
+  app.post('/api/search-grounding', async (req, res) => {
+    try {
+      const { query, location, language, user_type } = req.body ?? {};
+      if (!query || !String(query).trim()) {
+        return res.status(400).json({ error: 'INVALID_QUERY', message: 'Search query cannot be empty.' });
+      }
+      const grounded = await queryWeatherWithSearchGrounding({
+        query: String(query).trim(),
+        location: location ? String(location) : undefined,
+        language: (language || 'en') as SupportedLanguageCode,
+        userType: (user_type || 'citizen') as UserRoleType,
+      });
+      return res.json(grounded);
+    } catch (err) {
+      const typedErr = err as Error & { code?: string; status?: number };
+      return res.status(typedErr.status || 500).json({
+        error: typedErr.code || 'SEARCH_GROUNDING_FAILED',
+        message: typedErr.message || 'Unable to execute Google Search Grounding query.',
       });
     }
   });

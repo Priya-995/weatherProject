@@ -10,6 +10,7 @@ import {
   MessageSquarePlus,
   Mic,
   MicOff,
+  Search,
   Send,
   Trash2,
   Volume2,
@@ -17,6 +18,7 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
+import { getFeatureDict } from '../i18n/featureTranslations.ts';
 import { getDict } from '../i18n/translations.ts';
 import {
   SUPPORTED_LANGUAGES,
@@ -29,6 +31,7 @@ import {
 } from '../types/weather.ts';
 import { formatTimestamp, getSessionId } from '../utils/weatherFormat.ts';
 import { FormattedMessage } from './FormattedMessage.tsx';
+import { SearchGroundingPanel } from './SearchGroundingPanel.tsx';
 
 interface AssistantViewProps {
   selectedLocation: LocationResult;
@@ -72,7 +75,9 @@ export function AssistantView({
   const [editingConvId, setEditingConvId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
   const [showFullAudit, setShowFullAudit] = useState(false);
+  const [showSearchGrounding, setShowSearchGrounding] = useState(false);
   const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
+  const fDict = getFeatureDict(uiLanguage);
 
   // Voice & TTS states
   const [listening, setListening] = useState(false);
@@ -548,7 +553,24 @@ export function AssistantView({
             </div>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowSearchGrounding((v) => !v)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors whitespace-nowrap shrink-0 ${
+                showSearchGrounding
+                  ? 'border-sky-500 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300'
+                  : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Search className="h-3.5 w-3.5" />
+              <span>
+                {showSearchGrounding
+                  ? fDict.searchGrounding.hideBtn
+                  : fDict.searchGrounding.toggleBtn}
+              </span>
+            </button>
+
             <button
               type="button"
               onClick={() => setShowFullAudit((v) => !v)}
@@ -586,6 +608,18 @@ export function AssistantView({
               <span className="font-semibold">{dict.assistant.groqMissingTitle}</span>{' '}
               {dict.assistant.groqMissingBody}
             </div>
+          </div>
+        )}
+
+        {showSearchGrounding && (
+          <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-950/40 max-h-[55%] overflow-y-auto shrink-0">
+            <SearchGroundingPanel
+              locationName={activeConversation?.active_location || selectedLocation.name}
+              uiLanguage={uiLanguage}
+              replyLanguage={language}
+              userType={userType}
+              compact
+            />
           </div>
         )}
 
