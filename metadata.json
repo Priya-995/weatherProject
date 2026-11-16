@@ -1,0 +1,6 @@
+{
+  "name": "WeatherGPT",
+  "description": "AI-powered weather intelligence platform with real-time Open-Meteo and IMD forecasts, Groq LangChain assistant, interactive maps, analytics, and persistent PostgreSQL chat history.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
