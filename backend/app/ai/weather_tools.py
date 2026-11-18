@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from langchain_core.tools import tool
+from app.services.flood_predictor import flood_predictor
 from app.services.imd import fetch_weather_alerts
 from app.services.open_meteo import (
     fetch_historical_weather,
@@ -166,6 +167,13 @@ async def compare_locations(
     }
 
 
+@tool
+async def get_flood_prediction(district: str, forecast_date: str | None = None) -> dict[str, Any]:
+    """Query the central Uttar Pradesh 3-day flood-onset ML prediction engine (XGBoost + Isotonic Calibration) for a district and optional YYYY-MM-DD date."""
+    target = _normalize_date(forecast_date)
+    return await flood_predictor.predict_district(district, target)
+
+
 ALL_WEATHER_TOOLS = [
     get_current_weather,
     get_hourly_forecast,
@@ -175,6 +183,7 @@ ALL_WEATHER_TOOLS = [
     get_weather_alerts,
     get_historical_weather,
     compare_locations,
+    get_flood_prediction,
 ]
 
 TOOL_BY_NAME = {t.name: t for t in ALL_WEATHER_TOOLS}

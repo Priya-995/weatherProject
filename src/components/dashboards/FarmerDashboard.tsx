@@ -23,8 +23,8 @@ import {
 import { getDict, translateCondition } from '../../i18n/translations.ts';
 import type {
   AlertsResponse,
+  FloodPredictionResponse,
   HistoricalWeatherResponse,
-  LocationResult,
   NormalizedWeatherResponse,
   UILanguageCode,
 } from '../../types/weather.ts';
@@ -35,11 +35,16 @@ import {
   getWeatherIcon,
   type TempUnit,
 } from '../../utils/weatherFormat.ts';
+import { FloodRiskPanel } from '../FloodRiskPanel.tsx';
 
 interface FarmerDashboardProps {
   weather: NormalizedWeatherResponse;
   historical: HistoricalWeatherResponse | null;
   alerts: AlertsResponse | null;
+  floodPrediction: FloodPredictionResponse | null;
+  floodLoading: boolean;
+  floodDate: string;
+  onChangeFloodDate: (dateStr: string) => void;
   loading: boolean;
   unit: TempUnit;
   language: UILanguageCode;
@@ -52,6 +57,10 @@ export function FarmerDashboard({
   weather,
   historical,
   alerts,
+  floodPrediction,
+  floodLoading,
+  floodDate,
+  onChangeFloodDate,
   loading,
   unit,
   language,
@@ -267,6 +276,18 @@ export function FarmerDashboard({
           </p>
         </div>
       </div>
+
+      {/* Central 3-Day Flood ML Risk Outlook */}
+      <FloodRiskPanel
+        prediction={floodPrediction}
+        loading={floodLoading}
+        language={language}
+        userType="farmer"
+        forecastDate={floodDate}
+        onChangeForecastDate={onChangeFloodDate}
+        onAskAssistant={onAskAssistant}
+        showDateControl
+      />
 
       {/* 7-Day Rain Chart + Official Agromet Links */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">

@@ -264,11 +264,92 @@ export interface ConversationRecord {
   message_count?: number;
 }
 
+export interface SearchGroundingSource {
+  title: string;
+  uri: string;
+}
+
+export interface SearchGroundingResponse {
+  query: string;
+  answer: string;
+  sources: SearchGroundingSource[];
+  web_search_queries: string[];
+  model: string;
+  checked_at: string;
+}
+
+export type FloodPredictionStatus = 'available' | 'unavailable';
+
+export type FloodRiskLevel = 'elevated' | 'moderate' | 'low' | 'unavailable';
+
+export interface FloodFeatureSnapshot {
+  rain_1d: number;
+  rain_3d: number;
+  rain_7d: number;
+  rain_14d: number;
+  rain_30d: number;
+  rain_api: number;
+  soil_moisture: number;
+  soil_change_7d: number;
+  discharge: number;
+  discharge_change_3d: number;
+  discharge_anomaly: number;
+}
+
+export interface FloodPredictionResponse {
+  module: 'uttar_pradesh_flood_prediction';
+  status: FloodPredictionStatus;
+  reason?: string;
+  message: string;
+  is_official: false;
+  district_input: string;
+  canonical_district: string | null;
+  display_district: string | null;
+  study_group?: 'east' | 'central' | null;
+  forecast_date: string;
+  horizon_days: 3;
+  probability: number | null;
+  raw_probability?: number | null;
+  climatology_probability?: number | null;
+  threshold: number | null;
+  threshold_exceeded: boolean | null;
+  risk_level: FloodRiskLevel;
+  features?: FloodFeatureSnapshot | null;
+  coordinates?: {
+    district_lat: number;
+    district_lon: number;
+    river_lat: number;
+    river_lon: number;
+  } | null;
+  model_info: {
+    algorithm: string;
+    calibration: string;
+    season_months: string;
+    horizon_days: number;
+    trained_districts_count: number;
+    model_loaded: boolean;
+  };
+  supported_districts: string[];
+  disclaimer: string;
+  generated_at: string;
+}
+
+export interface FloodRegionalResponse {
+  module: 'uttar_pradesh_flood_prediction';
+  forecast_date: string;
+  model_loaded: boolean;
+  is_official: false;
+  disclaimer: string;
+  districts: FloodPredictionResponse[];
+  generated_at: string;
+}
+
 export type NavSection =
   | 'dashboard'
   | 'assistant'
   | 'forecast'
   | 'map'
+  | 'scene3d'
   | 'alerts'
   | 'analytics'
   | 'settings';

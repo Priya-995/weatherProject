@@ -3,6 +3,7 @@ import { RefreshCw } from 'lucide-react';
 import { getDict } from '../i18n/translations.ts';
 import type {
   AlertsResponse,
+  FloodPredictionResponse,
   HistoricalWeatherResponse,
   LocationResult,
   MapStationPoint,
@@ -15,6 +16,14 @@ import { CitizenDashboard } from './dashboards/CitizenDashboard.tsx';
 import { DisasterManagerDashboard } from './dashboards/DisasterManagerDashboard.tsx';
 import { FarmerDashboard } from './dashboards/FarmerDashboard.tsx';
 import { GovernmentDashboard } from './dashboards/GovernmentDashboard.tsx';
+
+function getTodayIstDate(): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
 
 interface DashboardViewProps {
   weather: NormalizedWeatherResponse | null;
@@ -56,6 +65,34 @@ export function DashboardView({
   const [alertsData, setAlertsData] = useState<AlertsResponse | null>(null);
   const [historicalData, setHistoricalData] = useState<HistoricalWeatherResponse | null>(null);
   const [stationsData, setStationsData] = useState<MapStationPoint[]>([]);
+  const [floodDate, setFloodDate] = useState<string>(() => getTodayIstDate());
+  const [floodPrediction, setFloodPrediction] = useState<FloodPredictionResponse | null>(null);
+  const [floodLoading, setFloodLoading] = useState<boolean>(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadFloodPrediction = async () => {
+      setFloodLoading(true);
+      try {
+        const params = new URLSearchParams({
+          district: selectedLocation.name,
+          forecast_date: floodDate,
+        });
+        const res = await fetch(`/api/flood/predict?${params.toString()}`);
+        if (res.ok && !cancelled) {
+          setFloodPrediction((await res.json()) as FloodPredictionResponse);
+        }
+      } catch {
+        if (!cancelled) setFloodPrediction(null);
+      } finally {
+        if (!cancelled) setFloodLoading(false);
+      }
+    };
+    loadFloodPrediction();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedLocation.name, floodDate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -111,9 +148,14 @@ export function DashboardView({
     return (
       <GovernmentDashboard
         selectedLocation={selectedLocation}
+        floodPrediction={floodPrediction}
+        floodLoading={floodLoading}
+        floodDate={floodDate}
+        onChangeFloodDate={setFloodDate}
         unit={unit}
         language={language}
         onSelectLocation={onQuickCity}
+        onAskAssistant={onAskAssistant}
         onOpenAlerts={onOpenAlerts}
       />
     );
@@ -158,6 +200,10 @@ export function DashboardView({
         weather={weather}
         historical={historicalData}
         alerts={alertsData}
+        floodPrediction={floodPrediction}
+        floodLoading={floodLoading}
+        floodDate={floodDate}
+        onChangeFloodDate={setFloodDate}
         loading={loading}
         unit={unit}
         language={language}
@@ -174,11 +220,16 @@ export function DashboardView({
         weather={weather}
         alerts={alertsData}
         stations={stationsData}
+        floodPrediction={floodPrediction}
+        floodLoading={floodLoading}
+        floodDate={floodDate}
+        onChangeFloodDate={setFloodDate}
         loading={loading}
         unit={unit}
         language={language}
         onRefresh={onRefresh}
         onSelectLocation={onQuickCity}
+        onAskAssistant={onAskAssistant}
         onOpenAlerts={onOpenAlerts}
       />
     );
@@ -188,6 +239,10 @@ export function DashboardView({
     <CitizenDashboard
       weather={weather}
       alerts={alertsData}
+      floodPrediction={floodPrediction}
+      floodLoading={floodLoading}
+      floodDate={floodDate}
+      onChangeFloodDate={setFloodDate}
       loading={loading}
       unit={unit}
       language={language}

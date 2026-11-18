@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   BarChart3,
   Bot,
+  Box,
   Building2,
   CalendarDays,
   CloudSun,
@@ -29,6 +30,8 @@ import { LocationSearch } from './components/LocationSearch.tsx';
 import { MapView } from './components/MapView.tsx';
 import { OnboardingScreen } from './components/OnboardingScreen.tsx';
 import { SettingsView } from './components/SettingsView.tsx';
+import { ThreeWeatherScene } from './components/ThreeWeatherScene.tsx';
+import { getFeatureDict } from './i18n/featureTranslations.ts';
 import { getDict } from './i18n/translations.ts';
 import {
   UI_LANGUAGES,
@@ -128,8 +131,16 @@ export default function App() {
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [pendingAssistantPrompt, setPendingAssistantPrompt] = useState<string | null>(null);
+  const [mapsQuotaExceeded, setMapsQuotaExceeded] = useState(false);
 
   const dict = getDict(prefs.language);
+  const fDict = getFeatureDict(prefs.language);
+
+  useEffect(() => {
+    const onQuotaExceeded = () => setMapsQuotaExceeded(true);
+    window.addEventListener('gmp-quota-exceeded', onQuotaExceeded);
+    return () => window.removeEventListener('gmp-quota-exceeded', onQuotaExceeded);
+  }, []);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -187,20 +198,21 @@ export default function App() {
       assistant: { id: 'assistant', label: dict.nav.assistant, icon: Bot },
       forecast: { id: 'forecast', label: dict.nav.forecast, icon: CalendarDays },
       map: { id: 'map', label: dict.nav.map, icon: MapIcon },
+      scene3d: { id: 'scene3d', label: fDict.navScene3d, icon: Box },
       alerts: { id: 'alerts', label: dict.nav.alerts, icon: AlertTriangle },
       analytics: { id: 'analytics', label: dict.nav.analytics, icon: BarChart3 },
       settings: { id: 'settings', label: dict.nav.settings, icon: Settings },
     };
 
     const orderByRole: Record<UserRoleType, NavSection[]> = {
-      citizen: ['dashboard', 'assistant', 'forecast', 'alerts', 'map', 'analytics', 'settings'],
-      farmer: ['dashboard', 'forecast', 'alerts', 'assistant', 'analytics', 'map', 'settings'],
-      government: ['dashboard', 'alerts', 'map', 'analytics', 'forecast', 'assistant', 'settings'],
-      disaster: ['dashboard', 'alerts', 'map', 'assistant', 'forecast', 'analytics', 'settings'],
+      citizen: ['dashboard', 'assistant', 'forecast', 'alerts', 'map', 'scene3d', 'analytics', 'settings'],
+      farmer: ['dashboard', 'forecast', 'alerts', 'assistant', 'analytics', 'map', 'scene3d', 'settings'],
+      government: ['dashboard', 'alerts', 'map', 'scene3d', 'analytics', 'forecast', 'assistant', 'settings'],
+      disaster: ['dashboard', 'alerts', 'map', 'scene3d', 'assistant', 'forecast', 'analytics', 'settings'],
     };
 
     return orderByRole[prefs.userType].map((id) => all[id]);
-  }, [dict, prefs.userType]);
+  }, [dict, fDict, prefs.userType]);
 
   if (!prefs.onboarded) {
     return (
@@ -221,7 +233,25 @@ export default function App() {
   const ActiveRoleIcon = ROLE_ICON[prefs.userType];
 
   return (
-    <div className="min-h-screen flex bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors">
+    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors">
+      {mapsQuotaExceeded && (
+        <div className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm">
+          <span>
+            Google Maps Platform quota reached. If you are the app owner, visit{' '}
+            <a
+              href="https://developers.google.com/maps/ai/ai-studio?utm_campaign=gmp_mcp_codeassist_v1_aistudio#quota_exceeded_errors"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline font-semibold text-amber-950 hover:text-amber-800"
+            >
+              maps developer site
+            </a>{' '}
+            for instructions to update your account.
+          </span>
+        </div>
+      )}
+
+      <div className="flex-1 flex">
       {mobileMenuOpen && (
         <div
           className="fixed inset-0 z-40 bg-slate-950/50 lg:hidden"
@@ -454,6 +484,19 @@ export default function App() {
               onSelectLocation={(loc) => setSelectedLocation(loc)}
               unit={prefs.unit}
               language={prefs.language}
+              theme={prefs.theme}
+              onOpen3dScene={() => setActiveNav('scene3d')}
+            />
+          )}
+
+          {activeNav === 'scene3d' && (
+            <ThreeWeatherScene
+              weather={dashboardWeather}
+              selectedLocation={selectedLocation}
+              unit={prefs.unit}
+              language={prefs.language}
+              theme={prefs.theme}
+              onBack={() => setActiveNav('dashboard')}
             />
           )}
 
@@ -462,6 +505,10 @@ export default function App() {
               selectedLocation={selectedLocation}
               language={prefs.language}
               userType={prefs.userType}
+              onAskAssistant={(prompt) => {
+                setPendingAssistantPrompt(prompt);
+                setActiveNav('assistant');
+              }}
             />
           )}
 
@@ -487,6 +534,7 @@ export default function App() {
             />
           )}
         </main>
+      </div>
       </div>
     </div>
   );

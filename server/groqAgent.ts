@@ -152,6 +152,28 @@ const WEATHER_TOOLS: GroqToolDef[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'get_flood_prediction',
+      description:
+        'Query the central Uttar Pradesh 3-day flood-onset ML prediction engine (XGBoost + Isotonic Calibration) for a district and optional date (YYYY-MM-DD). Returns calibrated probability if supported and monsoon-active (June–October), or explicit unavailable status for unsupported districts/dates/missing artifacts.',
+      parameters: {
+        type: 'object',
+        properties: {
+          district: {
+            type: 'string',
+            description: 'District name, e.g. Gonda, Sitapur, Prayagraj, Kanpur Nagar, Bahraich.',
+          },
+          forecast_date: {
+            type: 'string',
+            description: 'Optional target date YYYY-MM-DD, today, or tomorrow.',
+          },
+        },
+        required: ['district'],
+      },
+    },
+  },
 ];
 
 function getIstDateString(offsetDays = 0): string {
@@ -354,6 +376,44 @@ async function executeWeatherTool(
       };
     }
 
+    case 'get_flood_prediction': {
+      const districtArg =
+        typeof args.district === 'string' && args.district.trim()
+          ? args.district.trim()
+          : locArg;
+      const dateArg = normalizeDateToken(
+        typeof args.forecast_date === 'string' && args.forecast_date.trim()
+          ? args.forecast_date.trim()
+          : fallbackDate || 'today'
+      );
+      const floodBase = (
+        process.env.FLOOD_SERVICE_URL?.trim() || 'http://127.0.0.1:8001'
+      ).replace(/\/$/, '');
+      const url = `${floodBase}/api/flood/predict?district=${encodeURIComponent(districtArg)}&forecast_date=${encodeURIComponent(dateArg)}`;
+      try {
+        const res = await fetch(url);
+        const json = await res.json();
+        return {
+          result: json,
+          resolvedLocation: (json as { display_district?: string }).display_district || districtArg,
+          resolvedDate: dateArg,
+        };
+      } catch (err) {
+        return {
+          result: {
+            status: 'unavailable',
+            reason: 'ml_service_offline',
+            is_official: false,
+            district_input: districtArg,
+            forecast_date: dateArg,
+            message: `Flood ML service unavailable (${err instanceof Error ? err.message : 'connection error'}).`,
+          },
+          resolvedLocation: districtArg,
+          resolvedDate: dateArg,
+        };
+      }
+    }
+
     default:
       throw new Error(`Unknown weather tool: ${name}`);
   }
@@ -406,11 +466,12 @@ function buildSystemPrompt(
     `Active conversation context -> Location: ${activeLocation || 'None yet'}, Target Date: ${activeDate || today}.`,
     getRoleGuidance(userType),
     `STRICT GROUNDING RULES:`,
-    `1. Never invent, guess, or fabricate temperatures, rain probabilities, wind speeds, forecasts, or official alerts. Always invoke the appropriate weather tool(s) first.`,
+    `1. Never invent, guess, or fabricate temperatures, rain probabilities, wind speeds, forecasts, flood probabilities, or official alerts. Always invoke the appropriate weather or flood prediction tool(s) first.`,
     `2. Follow-up context retention: If the user asks a follow-up question without specifying a location (e.g., "What about in the morning?" or "Should I carry an umbrella?"), automatically use the active conversation Location (${activeLocation || 'ask if none'}) and Target Date (${activeDate || today}). If the user introduces a new city (e.g., "What about Delhi?") without changing the date, query the new city while keeping the active Target Date.`,
-    `3. Clearly distinguish official IMD/NDMA alerts from derived meteorological advisories or general safety precautions. If official alerts are unavailable or empty, state that honestly.`,
-    `4. Always cite the data source (e.g., Open-Meteo Forecast API, Open-Meteo Historical Archive, IMD/NDMA CAP Feed) in your answer.`,
-    `5. Language requirement: Respond entirely in ${langMeta.name} (${langMeta.nativeName}) using natural, clear phrasing.`,
+    `3. Clearly distinguish official IMD/NDMA/CWC warnings from derived meteorological advisories or experimental ML 3-day flood-onset predictions. Never present the XGBoost flood prediction as an official government warning.`,
+    `4. When the user asks about flood risk or flood probability, call get_flood_prediction. If status is "unavailable", clearly explain the exact reason returned (e.g. unsupported district, outside June–October monsoon season, missing Open-Meteo features, or missing model artifacts) without inventing any probability.`,
+    `5. Always cite the data source (e.g., Open-Meteo Forecast API, Open-Meteo Historical Archive, IMD/NDMA CAP Feed, UP XGBoost Flood ML Service) in your answer.`,
+    `6. Language requirement: Respond entirely in ${langMeta.name} (${langMeta.nativeName}) using natural, clear phrasing.`,
   ].join('\n');
 }
 

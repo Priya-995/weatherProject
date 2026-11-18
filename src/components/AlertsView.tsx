@@ -12,18 +12,30 @@ import { getDict } from '../i18n/translations.ts';
 import type {
   AlertLifecycleStatus,
   AlertsResponse,
+  FloodPredictionResponse,
   LocationResult,
   OfficialAlert,
   UILanguageCode,
   UserRoleType,
 } from '../types/weather.ts';
 import { formatTimestamp } from '../utils/weatherFormat.ts';
+import { FloodRiskPanel } from './FloodRiskPanel.tsx';
 import { FormattedMessage } from './FormattedMessage.tsx';
+import { SearchGroundingPanel } from './SearchGroundingPanel.tsx';
+
+function getTodayIstDate(): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
 
 interface AlertsViewProps {
   selectedLocation: LocationResult;
   language: UILanguageCode;
   userType: UserRoleType;
+  onAskAssistant?: (prompt: string) => void;
 }
 
 function severityTextClass(sev: OfficialAlert['severity']) {
@@ -39,7 +51,12 @@ function severityTextClass(sev: OfficialAlert['severity']) {
   }
 }
 
-export function AlertsView({ selectedLocation, language, userType }: AlertsViewProps) {
+export function AlertsView({
+  selectedLocation,
+  language,
+  userType,
+  onAskAssistant,
+}: AlertsViewProps) {
   const dict = getDict(language);
   const [data, setData] = useState<AlertsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -48,6 +65,9 @@ export function AlertsView({ selectedLocation, language, userType }: AlertsViewP
   const [explanations, setExplanations] = useState<Record<string, string>>({});
   const [explainingId, setExplainingId] = useState<string | null>(null);
   const [explainErrors, setExplainErrors] = useState<Record<string, string>>({});
+  const [floodDate, setFloodDate] = useState<string>(() => getTodayIstDate());
+  const [floodPrediction, setFloodPrediction] = useState<FloodPredictionResponse | null>(null);
+  const [floodLoading, setFloodLoading] = useState<boolean>(false);
 
   const loadAlerts = async () => {
     setLoading(true);
@@ -82,6 +102,31 @@ export function AlertsView({ selectedLocation, language, userType }: AlertsViewP
   useEffect(() => {
     setExplanations({});
   }, [language, userType]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadFlood = async () => {
+      setFloodLoading(true);
+      try {
+        const params = new URLSearchParams({
+          district: selectedLocation.name,
+          forecast_date: floodDate,
+        });
+        const res = await fetch(`/api/flood/predict?${params.toString()}`);
+        if (res.ok && !cancelled) {
+          setFloodPrediction((await res.json()) as FloodPredictionResponse);
+        }
+      } catch {
+        if (!cancelled) setFloodPrediction(null);
+      } finally {
+        if (!cancelled) setFloodLoading(false);
+      }
+    };
+    loadFlood();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedLocation.name, floodDate]);
 
   const handleExplainAlert = async (alert: OfficialAlert) => {
     setExplainingId(alert.id);
@@ -392,6 +437,14 @@ export function AlertsView({ selectedLocation, language, userType }: AlertsViewP
         ) : null}
       </section>
 
+      {/* Live Web & Bulletin Verification via Gemini 4 + Google Search Grounding */}
+      <SearchGroundingPanel
+        locationName={selectedLocation.name}
+        uiLanguage={language}
+        userType={userType}
+        compact
+      />
+
       {/* Derived Meteorological Advisories (Strictly Non-Official) */}
       <section className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-4">
         <div className="flex items-center gap-2.5 pb-4 border-b border-slate-200 dark:border-slate-800">
@@ -434,6 +487,18 @@ export function AlertsView({ selectedLocation, language, userType }: AlertsViewP
           </p>
         )}
       </section>
+
+      {/* Experimental 3-Day Flood ML Risk Outlook (Strictly Non-Official) */}
+      <FloodRiskPanel
+        prediction={floodPrediction}
+        loading={floodLoading}
+        language={language}
+        userType={userType}
+        forecastDate={floodDate}
+        onChangeForecastDate={setFloodDate}
+        onAskAssistant={onAskAssistant}
+        showDateControl
+      />
     </div>
   );
 }

@@ -69,11 +69,12 @@ def _build_system_prompt(
         f"Active conversation context -> Location: {active_location or 'None yet'}, Target Date: {active_date or today}.",
         _get_role_guidance(user_type),
         "STRICT GROUNDING RULES:",
-        "1. Always call the appropriate weather tool(s) before answering any weather question. Never fabricate numbers or alerts.",
+        "1. Always call the appropriate weather or flood prediction tool(s) before answering. Never fabricate numbers, flood probabilities, or alerts.",
         f"2. Contextual follow-ups: Retain Location ({active_location or 'ask if none'}) and Target Date ({active_date or today}) when omitted in follow-ups like 'What about in the morning?' or 'Should I carry an umbrella?'. If the user switches city, update the city while preserving the Target Date unless a new date is stated.",
-        "3. Clearly separate official IMD/NDMA warnings from derived meteorological advisories.",
-        "4. Always cite the data source in your reply.",
-        f"5. Respond strictly in {lang_label}.",
+        "3. Clearly separate official IMD/NDMA/CWC warnings from derived meteorological advisories and experimental ML 3-day flood-onset predictions. Never treat ML outputs as official government warnings.",
+        "4. When get_flood_prediction returns status='unavailable', explain the exact reason (unsupported district, outside June–October monsoon, missing Open-Meteo data, or missing model artifacts) without guessing.",
+        "5. Always cite the data source in your reply.",
+        f"6. Respond strictly in {lang_label}.",
     ])
 
 
