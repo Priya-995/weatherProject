@@ -26,6 +26,7 @@ import {
 import { getDict, translateCondition, translateWindDir } from '../../i18n/translations.ts';
 import type {
   AlertsResponse,
+  FloodPredictionResponse,
   LocationResult,
   NormalizedWeatherResponse,
   UILanguageCode,
@@ -39,10 +40,15 @@ import {
   getWeatherIcon,
   type TempUnit,
 } from '../../utils/weatherFormat.ts';
+import { FloodRiskPanel } from '../FloodRiskPanel.tsx';
 
 interface CitizenDashboardProps {
   weather: NormalizedWeatherResponse;
   alerts: AlertsResponse | null;
+  floodPrediction: FloodPredictionResponse | null;
+  floodLoading: boolean;
+  floodDate: string;
+  onChangeFloodDate: (dateStr: string) => void;
   loading: boolean;
   unit: TempUnit;
   language: UILanguageCode;
@@ -56,6 +62,10 @@ interface CitizenDashboardProps {
 export function CitizenDashboard({
   weather,
   alerts,
+  floodPrediction,
+  floodLoading,
+  floodDate,
+  onChangeFloodDate,
   loading,
   unit,
   language,
@@ -325,6 +335,18 @@ export function CitizenDashboard({
           {dict.nav.alerts}
         </button>
       </section>
+
+      {/* Central 3-Day Flood ML Risk Outlook */}
+      <FloodRiskPanel
+        prediction={floodPrediction}
+        loading={floodLoading}
+        language={language}
+        userType="citizen"
+        forecastDate={floodDate}
+        onChangeForecastDate={onChangeFloodDate}
+        onAskAssistant={onAskAssistant}
+        showDateControl
+      />
 
       {/* 24h Hourly + 7-Day Forecast Split */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">

@@ -10,6 +10,7 @@ import {
 import { getDict, translateCondition } from '../../i18n/translations.ts';
 import type {
   AlertsResponse,
+  FloodPredictionResponse,
   LocationResult,
   MapStationPoint,
   NormalizedWeatherResponse,
@@ -17,16 +18,23 @@ import type {
   UILanguageCode,
 } from '../../types/weather.ts';
 import { formatTemp, formatTimestamp, type TempUnit } from '../../utils/weatherFormat.ts';
+import { FloodRiskPanel } from '../FloodRiskPanel.tsx';
+import { RegionalFloodTable } from '../RegionalFloodTable.tsx';
 
 interface DisasterManagerDashboardProps {
   weather: NormalizedWeatherResponse;
   alerts: AlertsResponse | null;
   stations: MapStationPoint[];
+  floodPrediction: FloodPredictionResponse | null;
+  floodLoading: boolean;
+  floodDate: string;
+  onChangeFloodDate: (dateStr: string) => void;
   loading: boolean;
   unit: TempUnit;
   language: UILanguageCode;
   onRefresh: () => void;
   onSelectLocation: (loc: LocationResult) => void;
+  onAskAssistant: (prompt: string) => void;
   onOpenAlerts: () => void;
 }
 
@@ -34,11 +42,16 @@ export function DisasterManagerDashboard({
   weather,
   alerts,
   stations,
+  floodPrediction,
+  floodLoading,
+  floodDate,
+  onChangeFloodDate,
   loading,
   unit,
   language,
   onRefresh,
   onSelectLocation,
+  onAskAssistant,
   onOpenAlerts,
 }: DisasterManagerDashboardProps) {
   const dict = getDict(language);
@@ -129,6 +142,25 @@ export function DisasterManagerDashboard({
           </div>
         </div>
       </div>
+
+      {/* Central 3-Day Flood ML Risk Outlook & UP 14-District Matrix */}
+      <FloodRiskPanel
+        prediction={floodPrediction}
+        loading={floodLoading}
+        language={language}
+        userType="disaster"
+        forecastDate={floodDate}
+        onChangeForecastDate={onChangeFloodDate}
+        onAskAssistant={onAskAssistant}
+        showDateControl
+      />
+
+      <RegionalFloodTable
+        forecastDate={floodDate}
+        language={language}
+        activeDistrictName={weather.location.name}
+        onSelectLocation={onSelectLocation}
+      />
 
       {/* Warning Timelines + Cyclone/Heavy Rain Signals */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">

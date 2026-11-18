@@ -18,6 +18,7 @@ import {
 import { INDIA_STATE_DISTRICTS } from '../../data/indiaRegions.ts';
 import { getDict, translateCondition } from '../../i18n/translations.ts';
 import type {
+  FloodPredictionResponse,
   LocationResult,
   RegionalOverviewResponse,
   UILanguageCode,
@@ -28,20 +29,32 @@ import {
   formatTimestamp,
   type TempUnit,
 } from '../../utils/weatherFormat.ts';
+import { FloodRiskPanel } from '../FloodRiskPanel.tsx';
+import { RegionalFloodTable } from '../RegionalFloodTable.tsx';
 
 interface GovernmentDashboardProps {
   selectedLocation: LocationResult;
+  floodPrediction: FloodPredictionResponse | null;
+  floodLoading: boolean;
+  floodDate: string;
+  onChangeFloodDate: (dateStr: string) => void;
   unit: TempUnit;
   language: UILanguageCode;
   onSelectLocation: (loc: LocationResult) => void;
+  onAskAssistant: (prompt: string) => void;
   onOpenAlerts: () => void;
 }
 
 export function GovernmentDashboard({
   selectedLocation,
+  floodPrediction,
+  floodLoading,
+  floodDate,
+  onChangeFloodDate,
   unit,
   language,
   onSelectLocation,
+  onAskAssistant,
   onOpenAlerts,
 }: GovernmentDashboardProps) {
   const dict = getDict(language);
@@ -54,6 +67,15 @@ export function GovernmentDashboard({
   const [data, setData] = useState<RegionalOverviewResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const matched = INDIA_STATE_DISTRICTS.find(
+      (s) => s.state.toLowerCase() === (selectedLocation.admin1 || '').toLowerCase()
+    );
+    if (matched) {
+      setSelectedState(matched.state);
+    }
+  }, [selectedLocation.admin1]);
 
   const loadStateOverview = async (stateName: string) => {
     setLoading(true);
@@ -254,6 +276,27 @@ export function GovernmentDashboard({
           </table>
         </div>
       </section>
+
+      {/* Central 3-Day Flood ML Outlook + UP 14-District Monitoring Matrix */}
+      <FloodRiskPanel
+        prediction={floodPrediction}
+        loading={floodLoading}
+        language={language}
+        userType="government"
+        forecastDate={floodDate}
+        onChangeForecastDate={onChangeFloodDate}
+        onAskAssistant={onAskAssistant}
+        showDateControl
+      />
+
+      {selectedState === 'Uttar Pradesh' && (
+        <RegionalFloodTable
+          forecastDate={floodDate}
+          language={language}
+          activeDistrictName={selectedLocation.name}
+          onSelectLocation={onSelectLocation}
+        />
+      )}
 
       {/* District Chart + Official State Bulletins */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">

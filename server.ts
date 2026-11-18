@@ -3,6 +3,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import fs from 'node:fs';
 import path from 'node:path';
 import { createServer as createViteServer } from 'vite';
+import { spawn } from 'node:child_process';
 import type { OfficialAlert, SupportedLanguageCode, UserRoleType } from './src/types/weather.ts';
 import { chatRepo } from './server/db.ts';
 import { explainAlertWithGroq, runWeatherGptTurn } from './server/groqAgent.ts';
@@ -19,8 +20,50 @@ import {
 
 const PORT = Number(process.env.PORT || 3000);
 const FASTAPI_URL = process.env.FASTAPI_URL?.trim().replace(/\/$/, '');
+const FLOOD_SERVICE_URL = (process.env.FLOOD_SERVICE_URL?.trim() || 'http://127.0.0.1:8001').replace(/\/$/, '');
+
+const STUDY_DISTRICTS_LIST = [
+  'bahraich', 'ballia', 'bara banki', 'etawah', 'faizabad', 'fatehpur', 'gonda',
+  'kanpur dehat', 'kanpur nagar', 'kheri', 'pratapgarh', 'prayagraj', 'sitapur', 'unnao',
+];
+
+function maybeStartFloodMicroservice() {
+  if (FASTAPI_URL || process.env.DISABLE_FLOOD_AUTOSTART === 'true') return;
+  const backendDir = path.resolve(process.cwd(), 'backend');
+  const posixPy = path.join(backendDir, '.venv', 'bin', 'python');
+  const winPy = path.join(backendDir, '.venv', 'Scripts', 'python.exe');
+  const pythonBin = fs.existsSync(posixPy) ? posixPy : fs.existsSync(winPy) ? winPy : null;
+  if (!pythonBin || !fs.existsSync(path.join(backendDir, 'flood_service.py'))) {
+    return;
+  }
+
+  let port = '8001';
+  try {
+    const parsed = new URL(FLOOD_SERVICE_URL);
+    if (parsed.hostname !== '127.0.0.1' && parsed.hostname !== 'localhost') return;
+    if (parsed.port) port = parsed.port;
+  } catch {
+    return;
+  }
+
+  const child = spawn(
+    pythonBin,
+    ['-m', 'uvicorn', 'flood_service:app', '--host', '127.0.0.1', '--port', port],
+    { cwd: backendDir, stdio: 'ignore', detached: false }
+  );
+  child.on('error', (err) => {
+    console.warn('Flood ML microservice failed to start:', err.message);
+  });
+  const cleanup = () => {
+    if (!child.killed) child.kill('SIGTERM');
+  };
+  process.on('exit', cleanup);
+  process.on('SIGINT', cleanup);
+  process.on('SIGTERM', cleanup);
+}
 
 async function startServer() {
+  maybeStartFloodMicroservice();
   await chatRepo.init();
 
   const app = express();
@@ -297,15 +340,84 @@ async function startServer() {
     }
   });
 
-  // Modular placeholder for upcoming Uttar Pradesh flood-prediction ML model
-  app.get('/api/flood/status', (_req, res) => {
-    res.json({
-      module: 'uttar_pradesh_flood_prediction',
-      status: 'awaiting_model',
-      region: 'Uttar Pradesh',
-      message:
-        'Modular flood prediction slot is registered and ready. Attach the trained UP flood-prediction model and inference adapter when provided.',
-    });
+  // Central Uttar Pradesh XGBoost 3-day flood prediction proxy to standalone Python FastAPI ML service
+  app.use('/api/flood', async (req: Request, res: Response) => {
+    const targetUrl = `${FLOOD_SERVICE_URL}/api/flood${req.url}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 25000);
+    try {
+      const init: RequestInit = {
+        method: req.method,
+        signal: controller.signal,
+        headers: { 'Content-Type': 'application/json' },
+      };
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        init.body = JSON.stringify(req.body ?? {});
+      }
+      const upstream = await fetch(targetUrl, init);
+      const text = await upstream.text();
+      res.status(upstream.status);
+      res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/json');
+      return res.send(text);
+    } catch {
+      const district = String(req.query.district ?? '');
+      const forecastDate = String(req.query.forecast_date ?? new Date().toISOString().slice(0, 10));
+      if (req.path === '/status') {
+        return res.json({
+          module: 'uttar_pradesh_flood_prediction',
+          status: 'unavailable',
+          region: 'Uttar Pradesh',
+          model_loaded: false,
+          supported_districts: STUDY_DISTRICTS_LIST,
+          message:
+            'Python FastAPI Flood ML microservice is offline. Start it via uvicorn flood_service:app --port 8001 inside backend/.',
+        });
+      }
+      if (req.path === '/regional') {
+        return res.json({
+          module: 'uttar_pradesh_flood_prediction',
+          forecast_date: forecastDate,
+          model_loaded: false,
+          is_official: false,
+          disclaimer:
+            'Experimental ML 3-day flood-onset probability (XGBoost + Isotonic Calibration). Not an official IMD, CWC, or NDMA government flood warning.',
+          districts: [],
+          generated_at: new Date().toISOString(),
+        });
+      }
+      return res.json({
+        module: 'uttar_pradesh_flood_prediction',
+        status: 'unavailable',
+        reason: 'ml_service_offline',
+        message:
+          'Python FastAPI Flood ML microservice is offline. No fabricated prediction generated.',
+        is_official: false,
+        district_input: district,
+        canonical_district: null,
+        display_district: null,
+        forecast_date: forecastDate,
+        horizon_days: 3,
+        probability: null,
+        threshold: null,
+        threshold_exceeded: null,
+        risk_level: 'unavailable',
+        features: null,
+        model_info: {
+          algorithm: 'XGBoost + Isotonic Calibration',
+          calibration: 'IsotonicRegression',
+          season_months: 'June–October',
+          horizon_days: 3,
+          trained_districts_count: 14,
+          model_loaded: false,
+        },
+        supported_districts: STUDY_DISTRICTS_LIST,
+        disclaimer:
+          'Experimental ML 3-day flood-onset probability (XGBoost + Isotonic Calibration). Not an official IMD, CWC, or NDMA government flood warning.',
+        generated_at: new Date().toISOString(),
+      });
+    } finally {
+      clearTimeout(timer);
+    }
   });
 
   // Persistent Conversations & Chat APIs

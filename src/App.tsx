@@ -505,6 +505,10 @@ export default function App() {
               selectedLocation={selectedLocation}
               language={prefs.language}
               userType={prefs.userType}
+              onAskAssistant={(prompt) => {
+                setPendingAssistantPrompt(prompt);
+                setActiveNav('assistant');
+              }}
             />
           )}
 
